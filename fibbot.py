@@ -167,8 +167,8 @@ async def eintrag(interaction: discord.Interaction):
     await interaction.response.send_modal(modal)
 
 
-# Command for /bweis to handle file attachments (images/videos)
-@bot.tree.command(name="bweis", description="Fügt ein Bild oder Video als Beweis hinzu")
+# Command for /beweis to handle file attachments (images/videos)
+@bot.tree.command(name="beweis", description="Fügt ein Bild oder Video als Beweis hinzu")
 @app_commands.describe(attachment="Anhang/Beweis (Bild/Video)")
 async def beweis(interaction: discord.Interaction, attachment: discord.Attachment):
     now = datetime.now()
@@ -186,6 +186,12 @@ async def beweis(interaction: discord.Interaction, attachment: discord.Attachmen
         )
         return
 
+    # Defer response to give more time for processing
+    await interaction.response.defer()
+
+    # Ensure the "Images" directory exists
+    os.makedirs("Images", exist_ok=True)
+
     # Handle image attachments
     if attachment.content_type.startswith('image/'):
         image_path = os.path.join("Images", f"{attachment.filename}")
@@ -197,17 +203,22 @@ async def beweis(interaction: discord.Interaction, attachment: discord.Attachmen
             image_embed = discord.Embed()
             image_embed.set_image(url=f"attachment://{attachment.filename}")
             image_embed.set_footer(text=f"Beweis {formatted_date_time} | {user_display_name}")
-            await interaction.response.send_message(embed=image_embed, file=image_file)
+            await interaction.followup.send(embed=image_embed, file=image_file)
 
     # Handle video attachments
     elif attachment.content_type.startswith('video/'):
         video_path = os.path.join("Images", f"{attachment.filename}")
         await attachment.save(video_path)
 
+        # Check file size and avoid sending oversized files
+        if attachment.size > 64000000:
+            await interaction.followup.send("The file is too large. Please upload a smaller video.")
+            return
+
         # Send the locally saved video
         with open(video_path, 'rb') as f:
             video_file = discord.File(f, filename=attachment.filename)
-            message = await interaction.response.send_message(file=video_file)
+            message = await interaction.followup.send(file=video_file)
 
             # Create a link to the video
             video_link = message.attachments[0].url
@@ -215,6 +226,9 @@ async def beweis(interaction: discord.Interaction, attachment: discord.Attachmen
             video_embed.add_field(name="", value=f"Video Link: {video_link}")
             video_embed.set_footer(text=f"Beweis {formatted_date_time} | {user_display_name}")
             await interaction.channel.send(embed=video_embed)
+
+    else:
+        await interaction.followup.send("Unsupported file type. Only images and videos are allowed.")
 
 
 bot.run(token)
